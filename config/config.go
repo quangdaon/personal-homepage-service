@@ -6,8 +6,15 @@ import (
 	"os"
 )
 
+type UpsApiConfig struct {
+	BaseUri      string
+	ClientId     string
+	ClientSecret string
+}
+
 type Config struct {
-	DSN string
+	DSN    string
+	UPSApi *UpsApiConfig
 }
 
 func LoadConfig() *Config {
@@ -17,5 +24,10 @@ func LoadConfig() *Config {
 	}
 	return &Config{
 		DSN: os.Getenv("DATABASE_DSN"),
+		UPSApi: &UpsApiConfig{
+			BaseUri:      os.Getenv("UPS_API_BASE_URI"),
+			ClientId:     os.Getenv("UPS_API_CLIENT_ID"),
+			ClientSecret: os.Getenv("UPS_API_CLIENT_SECRET"),
+		},
 	}
 }

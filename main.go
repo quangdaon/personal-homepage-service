@@ -18,5 +18,5 @@ func main() {
 
 	shipmentWorker := shipments.NewShipmentWorker(db)
 
-	shipmentWorker.Init()
+	shipmentWorker.Execute()
 }

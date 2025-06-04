@@ -1,4 +1,4 @@
-package repository
+package repositories
 
 import (
 	"gorm.io/gorm"
@@ -10,7 +10,7 @@ type ShipmentRepository struct {
 	db *gorm.DB
 }
 
-// NewShipmentRepository creates a new repository with DB dependency
+// NewShipmentRepository creates a new repositories with DB dependency
 func NewShipmentRepository(db *gorm.DB) *ShipmentRepository {
 	return &ShipmentRepository{db: db}
 }
