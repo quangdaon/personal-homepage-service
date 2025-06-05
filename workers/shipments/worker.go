@@ -27,10 +27,9 @@ func NewWorker(db *gorm.DB) *Worker {
 }
 
 func (w *Worker) Execute() {
-	shipments, shipmentsErr := w.repo.GetAllShipments()
-
-	if shipmentsErr != nil {
-		log.Fatal(shipmentsErr)
+	shipments, err := w.repo.GetAllShipments()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if len(shipments) == 0 {
@@ -39,65 +38,21 @@ func (w *Worker) Execute() {
 
 	var wg sync.WaitGroup
 	for _, shipment := range shipments {
-		if !shouldCheck(shipment) {
+		if !w.shouldCheck(shipment) {
 			continue
 		}
 
 		wg.Add(1)
-
 		go func(sh models.Shipment) {
 			defer wg.Done()
-
-			processor, getProcessorErr := w.getProcessor(sh.Carrier.Key)
-			if getProcessorErr != nil {
-				log.Printf("Failed to get processor for %s: %v", sh.TrackingNumber, getProcessorErr)
-				return
-			}
-
-			result, processorErr := processor.Process(sh.TrackingNumber)
-			if processorErr != nil {
-				log.Printf("Failed to process %s: %v", sh.TrackingNumber, processorErr)
-				return
-			}
-
-			status, statusErr := w.repo.GetStatus(result.Status)
-			if statusErr != nil {
-				log.Printf("Failed to get status for %s: %v", result.TrackingNumber, statusErr)
-				return
-			}
-
-			sh.Status = &status
-			sh.LastLocation = result.LastLocation
-
-			if result.LastCheckedAt != nil {
-				lastCheckedUtc := result.LastCheckedAt.UTC()
-				sh.LastCheckedAt = &lastCheckedUtc
-			}
-
-			if result.DeliveryWindowStart != nil {
-				delStartUtc := result.DeliveryWindowStart.UTC()
-				sh.DeliveryWindowStart = &delStartUtc
-			}
-
-			if result.DeliveryWindowEnd != nil {
-				delEndUtc := result.DeliveryWindowEnd.UTC()
-				sh.DeliveryWindowEnd = &delEndUtc
-			}
-
-			err := w.repo.SaveShipment(&sh)
-			if err != nil {
-				log.Printf("Unable to save shipment %s: %v", sh.TrackingNumber, err)
-				return
-			}
-
-			log.Printf("Shipment %s was successfully processed", sh.TrackingNumber)
+			w.processShipment(sh)
 		}(shipment)
 	}
 
 	wg.Wait()
 }
 
-func shouldCheck(shipment models.Shipment) bool {
+func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 	const (
 		day           = 24 * time.Hour
 		soonThreshold = 2 * time.Hour
@@ -126,6 +81,55 @@ func shouldCheck(shipment models.Shipment) bool {
 	timeUntilExpected := shipment.DeliveryWindowEnd.Sub(now)
 
 	return timeUntilExpected < soonThreshold && timeSinceLastCheck > recheckDelay
+}
+
+func (w *Worker) processShipment(sh models.Shipment) {
+	processor, err := w.getProcessor(sh.Carrier.Key)
+	if err != nil {
+		log.Printf("Failed to get processor for %s: %v", sh.TrackingNumber, err)
+		return
+	}
+
+	result, err := processor.Process(sh.TrackingNumber)
+	if err != nil {
+		log.Printf("Failed to process %s: %v", sh.TrackingNumber, err)
+		return
+	}
+
+	status, err := w.repo.GetStatus(result.Status)
+	if err != nil {
+		log.Printf("Failed to get status for %s: %v", result.TrackingNumber, err)
+		return
+	}
+
+	w.updateShipmentFromResult(&sh, result, &status)
+
+	if err := w.repo.SaveShipment(&sh); err != nil {
+		log.Printf("Failed to save shipment %s: %v", sh.TrackingNumber, err)
+		return
+	}
+
+	log.Printf("Shipment %s was successfully processed", sh.TrackingNumber)
+}
+
+func (w *Worker) updateShipmentFromResult(sh *models.Shipment, result *processors.CarrierTrackingResults, status *models.ShipmentStatus) {
+	sh.Status = status
+	sh.LastLocation = result.LastLocation
+
+	if result.LastCheckedAt != nil {
+		utc := result.LastCheckedAt.UTC()
+		sh.LastCheckedAt = &utc
+	}
+
+	if result.DeliveryWindowStart != nil {
+		utc := result.DeliveryWindowStart.UTC()
+		sh.DeliveryWindowStart = &utc
+	}
+
+	if result.DeliveryWindowEnd != nil {
+		utc := result.DeliveryWindowEnd.UTC()
+		sh.DeliveryWindowEnd = &utc
+	}
 }
 
 func (w *Worker) getProcessor(carrier string) (processors.CarrierTrackingProcessor, error) {
