@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"log"
+	"os"
+	"os/signal"
 	"personal-homepage-service/config"
+	"personal-homepage-service/core"
 	"personal-homepage-service/workers/shipments"
+	"syscall"
 )
 
 func main() {
@@ -16,7 +21,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	shipmentWorker := shipments.NewWorker(db)
+	orchestrator := core.NewOrchestrator([]core.Worker{
+		shipments.NewWorker(db),
+	})
 
-	shipmentWorker.Execute()
+	c, err := orchestrator.Start(context.Background())
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer c.Stop()
+
+	// Wait for termination signal to exit gracefully
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
 }

@@ -16,6 +16,7 @@ type Worker struct {
 	repo       *repositories.Repository
 	processors map[string]processors.CarrierTrackingProcessor
 	mu         sync.Mutex
+	busy       bool
 }
 
 func NewWorker(db *gorm.DB) *Worker {
@@ -26,22 +27,36 @@ func NewWorker(db *gorm.DB) *Worker {
 	}
 }
 
+func (w *Worker) Schedule() string {
+	return "@every 5m"
+}
+
+func (w *Worker) Ready() bool {
+	return !w.busy
+}
+
 func (w *Worker) Execute() {
+	w.busy = true
+	defer func() {
+		w.busy = false
+	}()
+
+	log.Println("Starting shipment processing.")
+
 	shipments, err := w.repo.GetAllShipments()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(shipments) == 0 {
+	shipmentsToProcess := w.getShipmentsToProcess(shipments)
+
+	if len(shipmentsToProcess) == 0 {
+		log.Println("No shipments found. Shipment work completed 😴")
 		return
 	}
 
 	var wg sync.WaitGroup
-	for _, shipment := range shipments {
-		if !w.shouldCheck(shipment) {
-			continue
-		}
-
+	for _, shipment := range shipmentsToProcess {
 		wg.Add(1)
 		go func(sh models.Shipment) {
 			defer wg.Done()
@@ -50,6 +65,16 @@ func (w *Worker) Execute() {
 	}
 
 	wg.Wait()
+	log.Println("Shipment work completed 😴")
+}
+
+func (w *Worker) getShipmentsToProcess(ss []models.Shipment) (ret []models.Shipment) {
+	for _, s := range ss {
+		if w.shouldCheck(s) {
+			ret = append(ret, s)
+		}
+	}
+	return
 }
 
 func (w *Worker) shouldCheck(shipment models.Shipment) bool {
