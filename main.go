@@ -16,7 +16,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	shipmentWorker := shipments.NewShipmentWorker(db)
+	shipmentWorker := shipments.NewWorker(db)
 
 	shipmentWorker.Execute()
 }

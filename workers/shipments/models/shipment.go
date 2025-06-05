@@ -3,14 +3,15 @@ package models
 import "time"
 
 type Shipment struct {
-	ID             uint   `gorm:"primaryKey;autoIncrement"`
-	Label          string `gorm:"not null"`
-	TrackingNumber string `gorm:"size:100;not null;unique"`
-	TrackingURL    string `gorm:"size:256"`
-	ExpectedAt     *time.Time
-	LastLocation   string `gorm:"size:100"`
-	LastCheckedAt  *time.Time
-	ThumbnailURL   string `gorm:"size:256"`
+	ID                  uint   `gorm:"primaryKey;autoIncrement"`
+	Label               string `gorm:"not null"`
+	TrackingNumber      string `gorm:"size:100;not null;unique"`
+	TrackingURL         string `gorm:"size:256"`
+	DeliveryWindowStart *time.Time
+	DeliveryWindowEnd   *time.Time
+	LastLocation        string `gorm:"size:100"`
+	LastCheckedAt       *time.Time
+	ThumbnailURL        string `gorm:"size:256"`
 
 	// Foreign keys
 	StatusID  *uint

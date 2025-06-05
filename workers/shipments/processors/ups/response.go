@@ -30,14 +30,15 @@ type Location struct {
 }
 
 type Activity struct {
-	Location Location `json:"location"`
-	Date     string   `json:"gmtDate"`
-	Time     string   `json:"gmtTime"`
-	Status   Status   `json:"status"`
+	Location       Location `json:"location"`
+	Date           string   `json:"gmtDate"`
+	Time           string   `json:"gmtTime"`
+	TimeZoneOffset string   `json:"gmtOffset"`
+	Status         Status   `json:"status"`
 }
 
 type DeliveryDate struct {
-	Date string `json:"startTime"`
+	Date string `json:"date"`
 	Type string `json:"type"`
 }
 
