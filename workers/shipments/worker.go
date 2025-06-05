@@ -40,7 +40,6 @@ func (w *Worker) Execute() {
 	var wg sync.WaitGroup
 	for _, shipment := range shipments {
 		if !shouldCheck(shipment) {
-			log.Printf("Shipment %s was skipped", shipment.TrackingNumber)
 			continue
 		}
 
@@ -69,9 +68,21 @@ func (w *Worker) Execute() {
 
 			sh.Status = &status
 			sh.LastLocation = result.LastLocation
-			sh.LastCheckedAt = result.LastCheckedAt
-			sh.DeliveryWindowStart = result.DeliveryWindowStart
-			sh.DeliveryWindowEnd = result.DeliveryWindowEnd
+
+			if result.LastCheckedAt != nil {
+				lastCheckedUtc := result.LastCheckedAt.UTC()
+				sh.LastCheckedAt = &lastCheckedUtc
+			}
+
+			if result.DeliveryWindowStart != nil {
+				delStartUtc := result.DeliveryWindowStart.UTC()
+				sh.DeliveryWindowStart = &delStartUtc
+			}
+
+			if result.DeliveryWindowEnd != nil {
+				delEndUtc := result.DeliveryWindowEnd.UTC()
+				sh.DeliveryWindowEnd = &delEndUtc
+			}
 
 			err := w.repo.SaveShipment(&sh)
 			if err != nil {
@@ -97,26 +108,23 @@ func shouldCheck(shipment models.Shipment) bool {
 		return false
 	}
 
-	if shipment.LastCheckedAt == nil || shipment.Status.Key == "unchecked" {
+	if shipment.Status.Key == "unchecked" || shipment.LastCheckedAt == nil {
 		return true
 	}
 
 	now := time.Now()
 	timeSinceLastCheck := now.Sub(*shipment.LastCheckedAt)
 
-	// 3. If not checked in over a day, check
 	if timeSinceLastCheck > day {
 		return true
 	}
 
-	// 4. If we don't know when it's expected, nothing more to do
 	if shipment.DeliveryWindowEnd == nil {
 		return false
 	}
 
 	timeUntilExpected := shipment.DeliveryWindowEnd.Sub(now)
 
-	// 5. If expected soon and we haven’t checked recently, check
 	return timeUntilExpected < soonThreshold && timeSinceLastCheck > recheckDelay
 }
 
