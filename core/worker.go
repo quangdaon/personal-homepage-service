@@ -1,7 +1,9 @@
 package core
 
+import "time"
+
 type Worker interface {
 	Schedule() string
-	Ready() bool
+	Ready(now time.Time) bool
 	Execute()
 }

@@ -26,12 +26,11 @@ func main() {
 	})
 
 	c, err := orchestrator.Start(context.Background())
+	defer c.Stop()
 
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	defer c.Stop()
 
 	// Wait for termination signal to exit gracefully
 	sig := make(chan os.Signal, 1)

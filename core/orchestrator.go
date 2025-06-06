@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/robfig/cron/v3"
+	"time"
 )
 
 type Orchestrator struct {
@@ -19,7 +20,8 @@ func (o *Orchestrator) Start(ctx context.Context) (*cron.Cron, error) {
 
 	for _, worker := range o.workers {
 		_, err := c.AddFunc(worker.Schedule(), func() {
-			if worker.Ready() {
+			now := time.Now()
+			if worker.Ready(now) {
 				go worker.Execute()
 			}
 		})

@@ -28,10 +28,10 @@ func NewWorker(db *gorm.DB) *Worker {
 }
 
 func (w *Worker) Schedule() string {
-	return "@every 5m"
+	return "0/5 * * * *"
 }
 
-func (w *Worker) Ready() bool {
+func (w *Worker) Ready(time.Time) bool {
 	return !w.busy
 }
 
@@ -43,15 +43,20 @@ func (w *Worker) Execute() {
 
 	log.Println("Starting shipment processing.")
 
-	shipments, err := w.repo.GetAllShipments()
+	shipments, err := w.repo.GetOpenShipments()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if len(shipments) == 0 {
+		log.Println("No active shipments found. Shipment work completed 😴")
+		return
 	}
 
 	shipmentsToProcess := w.getShipmentsToProcess(shipments)
 
 	if len(shipmentsToProcess) == 0 {
-		log.Println("No shipments found. Shipment work completed 😴")
+		log.Println("No shipments are ready to be processed. Shipment work completed 😴")
 		return
 	}
 
@@ -66,6 +71,18 @@ func (w *Worker) Execute() {
 
 	wg.Wait()
 	log.Println("Shipment work completed 😴")
+}
+
+func (w *Worker) deferNextCheck() time.Time {
+	now := time.Now()
+	location := now.Location()
+	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, location)
+
+	if now.Before(nextCheck) {
+		return nextCheck
+	}
+
+	return nextCheck.AddDate(0, 0, 1)
 }
 
 func (w *Worker) getShipmentsToProcess(ss []models.Shipment) (ret []models.Shipment) {

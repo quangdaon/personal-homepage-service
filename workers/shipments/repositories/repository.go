@@ -19,6 +19,16 @@ func (r *Repository) GetAllShipments() ([]models.Shipment, error) {
 	return shipments, err
 }
 
+func (r *Repository) GetOpenShipments() ([]models.Shipment, error) {
+	var shipments []models.Shipment
+	err := r.db.Joins("Status").
+		Preload("Status").
+		Preload("Carrier").
+		Where("\"Status\".is_final = ?", false).
+		Find(&shipments).Error
+	return shipments, err
+}
+
 func (r *Repository) GetStatus(key string) (models.ShipmentStatus, error) {
 	var status models.ShipmentStatus
 	err := r.db.Where("key = ?", key).First(&status).Error
