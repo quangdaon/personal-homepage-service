@@ -2,6 +2,7 @@ package shipments
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
 	"personal-homepage-service/workers/shipments/models"
@@ -13,22 +14,24 @@ import (
 )
 
 type Worker struct {
+	logger     *zap.Logger
 	repo       *repositories.Repository
 	processors map[string]processors.CarrierTrackingProcessor
 	mu         sync.Mutex
 	busy       bool
 }
 
-func NewWorker(db *gorm.DB) *Worker {
+func NewWorker(logger *zap.Logger, db *gorm.DB) *Worker {
 	repo := repositories.NewRepository(db)
 	return &Worker{
+		logger:     logger,
 		repo:       repo,
 		processors: make(map[string]processors.CarrierTrackingProcessor),
 	}
 }
 
 func (w *Worker) Schedule() string {
-	return "0/5 * * * *"
+	return "*/30 * * * *"
 }
 
 func (w *Worker) Ready(time.Time) bool {
@@ -41,22 +44,23 @@ func (w *Worker) Execute() {
 		w.busy = false
 	}()
 
-	log.Println("Starting shipment processing.")
+	w.logger.Info("Starting shipment processing.")
 
 	shipments, err := w.repo.GetOpenShipments()
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 
 	if len(shipments) == 0 {
-		log.Println("No active shipments found. Shipment work completed 😴")
+		w.logger.Info("No active shipments found. Shipment work completed 😴")
 		return
 	}
 
 	shipmentsToProcess := w.getShipmentsToProcess(shipments)
 
 	if len(shipmentsToProcess) == 0 {
-		log.Println("No shipments are ready to be processed. Shipment work completed 😴")
+		w.logger.Info("No shipments are ready to be processed. Shipment work completed 😴")
 		return
 	}
 
@@ -70,7 +74,7 @@ func (w *Worker) Execute() {
 	}
 
 	wg.Wait()
-	log.Println("Shipment work completed 😴")
+	w.logger.Info("Shipment work completed 😴")
 }
 
 func (w *Worker) deferNextCheck() time.Time {
@@ -124,34 +128,49 @@ func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 
 	return timeUntilExpected < soonThreshold && timeSinceLastCheck > recheckDelay
 }
-
 func (w *Worker) processShipment(sh models.Shipment) {
 	processor, err := w.getProcessor(sh.Carrier.Key)
 	if err != nil {
-		log.Printf("Failed to get processor for %s: %v", sh.TrackingNumber, err)
+		w.logger.Error("Failed to get processor",
+			zap.String("tracking_number", sh.TrackingNumber),
+			zap.String("carrier_key", sh.Carrier.Key),
+			zap.Error(err),
+		)
 		return
 	}
 
 	result, err := processor.Process(sh.TrackingNumber)
 	if err != nil {
-		log.Printf("Failed to process %s: %v", sh.TrackingNumber, err)
+		w.logger.Error("Failed to process shipment",
+			zap.String("tracking_number", sh.TrackingNumber),
+			zap.Error(err),
+		)
 		return
 	}
 
 	status, err := w.repo.GetStatus(result.Status)
 	if err != nil {
-		log.Printf("Failed to get status for %s: %v", result.TrackingNumber, err)
+		w.logger.Error("Failed to get shipment status",
+			zap.String("tracking_number", result.TrackingNumber),
+			zap.String("status_key", result.Status),
+			zap.Error(err),
+		)
 		return
 	}
 
 	w.updateShipmentFromResult(&sh, result, &status)
 
 	if err := w.repo.SaveShipment(&sh); err != nil {
-		log.Printf("Failed to save shipment %s: %v", sh.TrackingNumber, err)
+		w.logger.Error("Failed to save shipment",
+			zap.String("tracking_number", sh.TrackingNumber),
+			zap.Error(err),
+		)
 		return
 	}
 
-	log.Printf("Shipment %s was successfully processed", sh.TrackingNumber)
+	w.logger.Info("Shipment successfully processed",
+		zap.String("tracking_number", sh.TrackingNumber),
+	)
 }
 
 func (w *Worker) updateShipmentFromResult(sh *models.Shipment, result *processors.CarrierTrackingResults, status *models.ShipmentStatus) {
@@ -186,7 +205,7 @@ func (w *Worker) getProcessor(carrier string) (processors.CarrierTrackingProcess
 
 	switch carrier {
 	case "ups":
-		processor = ups.NewTrackingProcessor()
+		processor = ups.NewTrackingProcessor(w.logger)
 	default:
 		return nil, fmt.Errorf("unsupported carrier: %s", carrier)
 	}

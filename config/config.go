@@ -13,8 +13,9 @@ type UpsApiConfig struct {
 }
 
 type Config struct {
-	DSN    string
-	UPSApi *UpsApiConfig
+	DSN           string
+	LogsDirectory string
+	UPSApi        *UpsApiConfig
 }
 
 func LoadConfig() *Config {
@@ -23,7 +24,8 @@ func LoadConfig() *Config {
 		log.Println("No .env file found, relying on environment variables")
 	}
 	return &Config{
-		DSN: os.Getenv("DATABASE_DSN"),
+		DSN:           os.Getenv("DATABASE_DSN"),
+		LogsDirectory: os.Getenv("LOGS_DIRECTORY"),
 		UPSApi: &UpsApiConfig{
 			BaseUri:      os.Getenv("UPS_API_BASE_URI"),
 			ClientId:     os.Getenv("UPS_API_CLIENT_ID"),

@@ -15,21 +15,28 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+	logger, err := core.NewLogger(*cfg)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
 	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
 
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		return
 	}
 
-	orchestrator := core.NewOrchestrator([]core.Worker{
-		shipments.NewWorker(db),
+	orchestrator := core.NewOrchestrator(logger, []core.Worker{
+		shipments.NewWorker(logger, db),
 	})
 
 	c, err := orchestrator.Start(context.Background())
 	defer c.Stop()
 
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
 	}
 
 	// Wait for termination signal to exit gracefully

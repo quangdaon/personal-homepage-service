@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
 	"time"
 )
 
 type Orchestrator struct {
+	logger  *zap.Logger
 	workers []Worker
 }
 
-func NewOrchestrator(workers []Worker) *Orchestrator {
-	return &Orchestrator{workers}
+func NewOrchestrator(logger *zap.Logger, workers []Worker) *Orchestrator {
+	return &Orchestrator{logger, workers}
 }
 
 func (o *Orchestrator) Start(ctx context.Context) (*cron.Cron, error) {
@@ -27,9 +29,17 @@ func (o *Orchestrator) Start(ctx context.Context) (*cron.Cron, error) {
 		})
 
 		if err != nil {
-			fmt.Println("Error adding cron job:", err)
+			o.logger.Error("Error adding cron job",
+				zap.String("worker", fmt.Sprintf("%T", worker)),
+				zap.String("details", err.Error()),
+			)
 			return nil, err
 		}
+
+		o.logger.Info("Worker started",
+			zap.String("worker", fmt.Sprintf("%T", worker)),
+			zap.String("schedule", worker.Schedule()),
+		)
 	}
 
 	c.Start()

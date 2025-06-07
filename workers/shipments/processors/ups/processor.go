@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
@@ -66,11 +67,12 @@ var upsCodeMap = map[string]string{
 
 type TrackingProcessor struct {
 	config *config.UpsApiConfig
+	logger *zap.Logger
 }
 
-func NewTrackingProcessor() *TrackingProcessor {
+func NewTrackingProcessor(logger *zap.Logger) *TrackingProcessor {
 	cfg := config.LoadConfig()
-	return &TrackingProcessor{cfg.UPSApi}
+	return &TrackingProcessor{cfg.UPSApi, logger}
 }
 
 func (p *TrackingProcessor) Process(trackingNumber string) (*processors.CarrierTrackingResults, error) {
@@ -84,7 +86,7 @@ func (p *TrackingProcessor) Process(trackingNumber string) (*processors.CarrierT
 	now := time.Now()
 	delStart, delEnd, delErr := getExpectedDeliveryWindow(pkg)
 	if delErr != nil {
-		fmt.Println("Error parsing datetime:", err)
+		p.logger.Error("Error parsing datetime:" + delErr.Error())
 	}
 
 	return &processors.CarrierTrackingResults{
@@ -156,7 +158,6 @@ func basicAuth(username, password string) string {
 func (p *TrackingProcessor) getAccessToken() (string, error) {
 	u, err := url.Parse(p.config.BaseUri + "/security/v1/oauth/token")
 	if err != nil {
-		fmt.Println("URL parse error:", err)
 		return "", err
 	}
 
