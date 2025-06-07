@@ -1,12 +1,12 @@
 package shipments
 
 import (
-	"fmt"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
 	"personal-homepage-service/workers/shipments/models"
 	"personal-homepage-service/workers/shipments/processors"
+	"personal-homepage-service/workers/shipments/processors/unsupported"
 	"personal-homepage-service/workers/shipments/processors/ups"
 	"personal-homepage-service/workers/shipments/repositories"
 	"sync"
@@ -31,7 +31,7 @@ func NewWorker(logger *zap.Logger, db *gorm.DB) *Worker {
 }
 
 func (w *Worker) Schedule() string {
-	return "*/30 * * * *"
+	return "*/5 * * * *"
 }
 
 func (w *Worker) Ready(time.Time) bool {
@@ -44,8 +44,6 @@ func (w *Worker) Execute() {
 		w.busy = false
 	}()
 
-	w.logger.Info("Starting shipment processing.")
-
 	shipments, err := w.repo.GetOpenShipments()
 	if err != nil {
 		log.Fatal(err)
@@ -53,16 +51,18 @@ func (w *Worker) Execute() {
 	}
 
 	if len(shipments) == 0 {
-		w.logger.Info("No active shipments found. Shipment work completed 😴")
+		w.logger.Info("No active shipments found. Shipment work skipped 😴")
 		return
 	}
 
 	shipmentsToProcess := w.getShipmentsToProcess(shipments)
 
 	if len(shipmentsToProcess) == 0 {
-		w.logger.Info("No shipments are ready to be processed. Shipment work completed 😴")
+		w.logger.Info("No shipments are ready to be processed. Shipment work skipped 😴")
 		return
 	}
+
+	w.logger.Info("Starting shipment processing.")
 
 	var wg sync.WaitGroup
 	for _, shipment := range shipmentsToProcess {
@@ -75,18 +75,6 @@ func (w *Worker) Execute() {
 
 	wg.Wait()
 	w.logger.Info("Shipment work completed 😴")
-}
-
-func (w *Worker) deferNextCheck() time.Time {
-	now := time.Now()
-	location := now.Location()
-	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, location)
-
-	if now.Before(nextCheck) {
-		return nextCheck
-	}
-
-	return nextCheck.AddDate(0, 0, 1)
 }
 
 func (w *Worker) getShipmentsToProcess(ss []models.Shipment) (ret []models.Shipment) {
@@ -129,15 +117,7 @@ func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 	return timeUntilExpected < soonThreshold && timeSinceLastCheck > recheckDelay
 }
 func (w *Worker) processShipment(sh models.Shipment) {
-	processor, err := w.getProcessor(sh.Carrier.Key)
-	if err != nil {
-		w.logger.Error("Failed to get processor",
-			zap.String("tracking_number", sh.TrackingNumber),
-			zap.String("carrier_key", sh.Carrier.Key),
-			zap.Error(err),
-		)
-		return
-	}
+	processor := w.getProcessor(sh.Carrier.Key)
 
 	result, err := processor.Process(sh.TrackingNumber)
 	if err != nil {
@@ -193,12 +173,12 @@ func (w *Worker) updateShipmentFromResult(sh *models.Shipment, result *processor
 	}
 }
 
-func (w *Worker) getProcessor(carrier string) (processors.CarrierTrackingProcessor, error) {
+func (w *Worker) getProcessor(carrier string) processors.CarrierTrackingProcessor {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if processor, exists := w.processors[carrier]; exists {
-		return processor, nil
+		return processor
 	}
 
 	var processor processors.CarrierTrackingProcessor
@@ -207,9 +187,9 @@ func (w *Worker) getProcessor(carrier string) (processors.CarrierTrackingProcess
 	case "ups":
 		processor = ups.NewTrackingProcessor(w.logger)
 	default:
-		return nil, fmt.Errorf("unsupported carrier: %s", carrier)
+		processor = unsupported.NewTrackingProcessor(w.logger)
 	}
 
 	w.processors[carrier] = processor
-	return processor, nil
+	return processor
 }

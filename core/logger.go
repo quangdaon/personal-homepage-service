@@ -12,9 +12,7 @@ import (
 func NewLogger(cfg config.Config) (*zap.Logger, error) {
 	// Get the current UTC date to create a new file per run
 	runTimestamp := time.Now().UTC().Format("2006-01-02T15-04-05")
-	logFile := fmt.Sprintf(cfg.LogsDirectory+"/personal-homepage-service-%s.log", runTimestamp)
-
-	fmt.Printf(logFile)
+	logFile := fmt.Sprintf("%v/personal-homepage-service-%s.log", cfg.LogsDirectory, runTimestamp)
 
 	// Set up lumberjack for daily rotation
 	lumberjackLogger := &lumberjack.Logger{
