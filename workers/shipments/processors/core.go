@@ -1,5 +1,7 @@
 package processors
 
+import "personal-homepage-service/workers/shipments/models"
+
 type CarrierTrackingProcessor interface {
-	Process(trackingNumber string) (*CarrierTrackingResults, error)
+	Process(shipment models.Shipment) (*CarrierTrackingResults, error)
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"personal-homepage-service/config"
+	"personal-homepage-service/workers/shipments/models"
 	"personal-homepage-service/workers/shipments/processors"
 	"strings"
 	"time"
@@ -75,14 +76,15 @@ func NewTrackingProcessor(logger *zap.Logger) *TrackingProcessor {
 	return &TrackingProcessor{cfg.UPSApi, logger}
 }
 
-func (p *TrackingProcessor) Process(trackingNumber string) (*processors.CarrierTrackingResults, error) {
+func (p *TrackingProcessor) Process(shipment models.Shipment) (*processors.CarrierTrackingResults, error) {
+	trackingNumber := shipment.TrackingNumber
 	details, err := p.getTrackingDetails(trackingNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	shipment := details.Response.Shipments[0]
-	pkg := shipment.Packages[0]
+	shp := details.Response.Shipments[0]
+	pkg := shp.Packages[0]
 	now := time.Now()
 	delStart, delEnd, delErr := getExpectedDeliveryWindow(pkg)
 	if delErr != nil {

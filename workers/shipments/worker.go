@@ -6,6 +6,7 @@ import (
 	"log"
 	"personal-homepage-service/workers/shipments/models"
 	"personal-homepage-service/workers/shipments/processors"
+	"personal-homepage-service/workers/shipments/processors/uds"
 	"personal-homepage-service/workers/shipments/processors/unsupported"
 	"personal-homepage-service/workers/shipments/processors/ups"
 	"personal-homepage-service/workers/shipments/repositories"
@@ -119,7 +120,7 @@ func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 func (w *Worker) processShipment(sh models.Shipment) {
 	processor := w.getProcessor(sh.Carrier.Key)
 
-	result, err := processor.Process(sh.TrackingNumber)
+	result, err := processor.Process(sh)
 	if err != nil {
 		w.logger.Error("Failed to process shipment",
 			zap.String("tracking_number", sh.TrackingNumber),
@@ -186,6 +187,8 @@ func (w *Worker) getProcessor(carrier string) processors.CarrierTrackingProcesso
 	switch carrier {
 	case "ups":
 		processor = ups.NewTrackingProcessor(w.logger)
+	case "uds":
+		processor = uds.NewTrackingProcessor(w.logger)
 	default:
 		processor = unsupported.NewTrackingProcessor(w.logger)
 	}
