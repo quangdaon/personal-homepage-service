@@ -82,10 +82,19 @@ func (p *TrackingProcessor) Process(shipment models.Shipment) (*processors.Carri
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 
 	shp := details.Response.Shipments[0]
+
+	if len(shp.Packages) == 0 {
+		return &processors.CarrierTrackingResults{
+			TrackingNumber: trackingNumber,
+			LastCheckedAt:  &now,
+			Status:         "pending",
+		}, nil
+	}
+
 	pkg := shp.Packages[0]
-	now := time.Now()
 	delStart, delEnd, delErr := getExpectedDeliveryWindow(pkg)
 	if delErr != nil {
 		p.logger.Error("Error parsing datetime:" + delErr.Error())
@@ -102,6 +111,10 @@ func (p *TrackingProcessor) Process(shipment models.Shipment) (*processors.Carri
 }
 
 func getExpectedDeliveryWindow(p Package) (*time.Time, *time.Time, error) {
+	if len(p.DeliveryDate) == 0 {
+		return nil, nil, nil
+	}
+
 	date := p.DeliveryDate[0].Date
 
 	end, endErr := parseDatetime(date, p.DeliveryTime.EndTime)
@@ -136,6 +149,10 @@ func parseDatetime(date string, timeStr string) (*time.Time, error) {
 func getLastLocation(activity []Activity) string {
 	lastLocation := activity[0].Location
 	region := lastLocation.Address.CountryCode
+
+	if lastLocation.Address.City == "" {
+		return region
+	}
 
 	if lastLocation.Address.CountryCode == "US" {
 		region = lastLocation.Address.State

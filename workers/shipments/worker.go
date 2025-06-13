@@ -89,9 +89,9 @@ func (w *Worker) getShipmentsToProcess(ss []models.Shipment) (ret []models.Shipm
 
 func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 	const (
-		day           = 24 * time.Hour
-		soonThreshold = 2 * time.Hour
-		recheckDelay  = 15 * time.Minute
+		frequencyThreshold = 6 * time.Hour
+		soonThreshold      = 2 * time.Hour
+		recheckDelay       = 15 * time.Minute
 	)
 
 	if shipment.Status.IsFinal {
@@ -105,7 +105,7 @@ func (w *Worker) shouldCheck(shipment models.Shipment) bool {
 	now := time.Now()
 	timeSinceLastCheck := now.Sub(*shipment.LastCheckedAt)
 
-	if timeSinceLastCheck > day {
+	if timeSinceLastCheck > frequencyThreshold {
 		return true
 	}
 
