@@ -18,7 +18,7 @@ import (
 
 var upsCodeMap = map[string]string{
 	"003": "pending",            // Shipment Ready for UPS
-	"005": "in_transit",         // In Transit
+	"005": "accepted",           // In Transit
 	"006": "out_for_delivery",   // Out for Delivery Today
 	"007": "cancelled",          // Shipment Canceled
 	"011": "delivered",          // Delivered
@@ -117,13 +117,21 @@ func getExpectedDeliveryWindow(p Package) (*time.Time, *time.Time, error) {
 
 	date := p.DeliveryDate[0].Date
 
-	end, endErr := parseDatetime(date, p.DeliveryTime.EndTime)
+	endTime := "235959"
+	startTime := "000000"
 
-	if endErr != nil || p.DeliveryTime.StartTime == "" {
+	if p.DeliveryTime.Type != "EOD" {
+		endTime = p.DeliveryTime.EndTime
+		startTime = p.DeliveryTime.StartTime
+	}
+
+	end, endErr := parseDatetime(date, endTime)
+
+	if endErr != nil || startTime == "" {
 		return nil, end, endErr
 	}
 
-	start, startErr := parseDatetime(date, p.DeliveryTime.StartTime)
+	start, startErr := parseDatetime(date, startTime)
 
 	if startErr != nil {
 		return nil, end, startErr
